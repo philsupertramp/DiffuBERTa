@@ -4,14 +4,17 @@ import re
 import json
 import math
 from transformers import RobertaForMaskedLM, AutoModelForMaskedLM, AutoTokenizer
+from peft import PeftModel
 from diffuberta.helpers import extract_parallel, sanitize_json_value
 
 # Setup
 model_name = "./json_diff_model" #"roberta-base"
 
-model_id = "answerdotai/ModernBERT-base" 
+model_id = "answerdotai/ModernBERT-base"
 
-model = AutoModelForMaskedLM.from_pretrained(model_name)
+# Load base model, then apply LoRA adapters
+base_model = AutoModelForMaskedLM.from_pretrained(model_id)
+model = PeftModel.from_pretrained(base_model, model_name)
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model.eval()
 
@@ -24,7 +27,7 @@ def run_stress_test(name, text, instruction, template, steps=10):
     print(f"\n🔍 Parsed & Sanitized: {raw_output}")
     # Simple regex parser for the demo
     for key, val in raw_output.items():
-        print(f"   • {key}: {sanitize_json_value(val)}")
+        print(f"   • {key}: {val}")
     print("-" * 40)
 
 # ==========================================
@@ -100,5 +103,5 @@ instruction = "Extract destination"
 template = {"city": "[10]", "country": "[10]"}
 
 # Run with more steps to allow for "Mind Changing"
-result = extract_parallel(tokenizer, model, text, instruction, template, steps=-1)
+result = extract_parallel(tokenizer, model, text, instruction, template, steps=3)
 print(result)

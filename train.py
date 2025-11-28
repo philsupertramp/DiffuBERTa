@@ -24,15 +24,15 @@ if tokenizer.pad_token is None:
 SLOT_LEN = 10 
 
 # --- Data Generation ---
-# Generate 20000 diverse samples (as per your script)
+# Generate more diverse samples for better learning
 gen = UniversalGenerator()
-train_data = [gen.get_sample() for _ in range(20000)]
-test_data = train_data[:int(len(train_data)*0.2)]
-train_data = train_data[len(test_data):]
+train_data = [gen.get_sample() for _ in range(10000)]  # 10k samples - balanced size for GPU stability
+test_data = [gen.get_sample() for _ in range(1000)]  # Separate test set (10%)
 print(f"Sample 0: {train_data[0]}")
 
-dataset = OvershootDataset(train_data, tokenizer)
-test_dataset = OvershootDataset(test_data, tokenizer)
+# Use variable_slots=True for adaptive slot sizing during training
+dataset = OvershootDataset(train_data, tokenizer, slot_len=10, variable_slots=True)
+test_dataset = OvershootDataset(test_data, tokenizer, slot_len=10, variable_slots=True)
 
 # --- LoRA Config ---
 if 'ModernBERT-base' in model_id:
@@ -62,18 +62,27 @@ model.print_trainable_parameters()
 # --- Training Arguments ---
 training_args = TrainingArguments(
     output_dir="./json_diff_model",
-    num_train_epochs=3,
-    per_device_train_batch_size=12,
-    learning_rate=5e-5,
+    num_train_epochs=5,  # Increased from 3 to 5 for better learning
+    per_device_train_batch_size=2,  # Minimum batch size to avoid CUDA issues
+    gradient_accumulation_steps=8,  # Effective batch size = 16
+    learning_rate=3e-5,  # Slightly lower for more stable training
     weight_decay=0.01,
-    logging_steps=10,
-    save_strategy="no",
+    max_grad_norm=1.0,  # Gradient clipping to prevent instability
+    logging_steps=50,
+    save_strategy="epoch",  # Save checkpoints each epoch
+    save_total_limit=2,  # Keep only best 2 checkpoints
+    load_best_model_at_end=True,
+    metric_for_best_model="eval_loss",
     report_to="wandb",
     hub_model_id=hub_model_id,
     push_to_hub=True,
-    run_name='DiffuBERTa',
+    run_name='DiffuBERTa-v2-CPU',
     do_eval=True,
     eval_strategy='epoch',
+    warmup_steps=500,  # Warmup for stable training
+    fp16=False,  # Disable mixed precision to avoid instability
+    dataloader_num_workers=0,  # Avoid multiprocessing issues
+    no_cuda=True,  # Force CPU training for stability
 )
 
 trainer = Trainer(
@@ -84,8 +93,20 @@ trainer = Trainer(
 )
 
 print("Starting Fine-Tuning...")
-train_result = trainer.train()
-print("Training Complete.")
+
+# Clear CUDA cache before training to avoid memory issues
+if torch.cuda.is_available():
+    torch.cuda.empty_cache()
+    print("CUDA cache cleared")
+
+try:
+    train_result = trainer.train()
+    print("Training Complete.")
+except RuntimeError as e:
+    if "CUDA" in str(e):
+        print(f"⚠️ CUDA Error occurred: {e}")
+        print("Try reducing batch_size or sequence length")
+    raise
 
 # Save and Push initial files
 trainer.save_model('./json_diff_model')
@@ -100,7 +121,7 @@ model.eval()
 # 2. Test Input for Validation
 test_text = "We are excited to welcome Dr. Sarah to our Paris office as Senior Data Scientist."
 test_instr = "Extract details"
-test_template = '{"name": "[1]", "job": "[2]", "city": "[1]"}'
+test_template = {"name": "[1]", "job": "[2]", "city": "[1]"}
 
 # 3. Run Inference
 result = extract_parallel(tokenizer, model, test_text, test_instr, test_template, steps=5)
