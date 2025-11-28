@@ -2,8 +2,8 @@
 
 > **Strict JSON generation using BERT as a Discrete Diffusion Model.**
 
-[![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://www.python.org/)
-[![Transformers](https://img.shields.io/badge/🤗%20Transformers-4.30%2B-yellow)](https://huggingface.co/docs/transformers/index)
+[![Python](https://img.shields.io/badge/Python-3.13%2B-blue)](https://www.python.org/)
+[![Transformers](https://img.shields.io/badge/🤗%20Transformers-4.57%2B-yellow)](https://huggingface.co/docs/transformers/index)
 [![PEFT](https://img.shields.io/badge/PEFT-LoRA-green)](https://github.com/huggingface/peft)
 
 **DiffuBERTa** is a proof-of-concept framework that treats data extraction not as "text generation," but as **schema-constrained inpainting**. By using `roberta-base` with a custom parallel decoding strategy, this approach guarantees 100% valid JSON syntax and leverages bidirectional context to solve complex extraction tasks.
